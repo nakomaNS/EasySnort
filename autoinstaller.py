@@ -13,7 +13,6 @@ LOCAL_RULES_PATH = "/usr/local/etc/snort/rules/local.rules"
 
 
 def run_command(command, error_message):
-    """Executa um comando no shell e para o script se der erro."""
     try:
         subprocess.run(command, check=True, shell=False)
     except subprocess.CalledProcessError as e:
@@ -24,7 +23,6 @@ def run_command(command, error_message):
         sys.exit(1)
 
 def write_file_as_root(filepath, content):
-    """Escreve um conteúdo de string em um arquivo usando sudo tee."""
     command = ["sudo", "tee", filepath]
     try:
         subprocess.run(command, input=content, text=True, check=True, stdout=subprocess.DEVNULL)
@@ -34,7 +32,6 @@ def write_file_as_root(filepath, content):
 
 
 def install_dependencies():
-    """Instala todos os pacotes necessários via apt."""
     print(">>> PASSO 1: Instalando dependências do sistema...")
     dependencies = [
         'build-essential', 'cmake', 'make', 'gcc', 'g++', 'git', 'wget',
@@ -52,7 +49,6 @@ def install_dependencies():
 
 
 def download_sources():
-    """Baixa os códigos-fonte do DAQ e do Snort usando git."""
     print("\n>>> PASSO 2: Baixando códigos-fonte...")
     work_dir = os.path.expanduser("~/snort_src")
     if not os.path.exists(work_dir):
@@ -154,7 +150,6 @@ def setup_snort_environment():
 
 
 def deploy_lua_and_rules():
-    """Cria e implanta os arquivos snort.lua e local.rules, validando o HOME_NET."""
     print("\n>>> PASSO 5: Implantando arquivos de configuração...")
     local_rules_content = 'alert icmp any any -> any any (msg:"ICMP test detected"; sid:1000002; rev:1;)'
     snort_lua_template = """
@@ -194,7 +189,6 @@ outputs = {}
 
 
 def create_systemd_service():
-    """Cria o arquivo de serviço do systemd para o Snort."""
     print("\n>>> PASSO 6: Criando o serviço systemd...")
     
     net_interface = input("--> Digite o nome da interface de rede que o Snort deve monitorar (ex: enp0s3, eth0): ")
