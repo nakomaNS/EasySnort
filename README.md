@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.x-brightgreen.svg)
 ![Plataforma](https://img.shields.io/badge/plataforma-Linux-lightgrey.svg)
 
-**EasySnort** é uma ferramenta que automatiza a instalação completa do Snort 3 em sistemas Debian e Ubuntu. Ele transforma o processo complexo de compilação e configuração em um único comando interativo.
+**EasySnort** é uma ferramenta de linha de comando para simplificar a instalação, o gerenciamento e a remoção do Snort 3 em sistemas baseados em Debian e Ubuntu.
 
 ---
 
@@ -13,80 +13,51 @@
 * **Sistema:** Debian 11/12 ou Ubuntu 22.04/24.04 (ou derivados).
 * **Acesso:** Privilégios de `root` ou um usuário com acesso `sudo`.
 
+* **Pacotes Iniciais:** `git` e `python3` devem estar instalados.
+```bash
+sudo apt update && sudo apt install git python3 -y
+```
+
 ---
 
 ### Instalação
 
-**ATENÇÃO:** O script irá pausar durante a execução para solicitar algumas informações de rede necessárias.
-
-### 1. Instalação
-
-**Baixe as dependências de pré-instação**
 ```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install git python3
-```
-
-**Clone o repositório e entre no diretório:**
-```bash
+# Clone o repositório
 git clone https://github.com/nakomaNS/EasySnort
-cd EasySnort
-```
 
-**Dê permissão de execução ao script:**
-```bash
+# Entre no diretório
+cd EasySnort
+
+# Dê permissão de execução ao script
 chmod +x easysnort.py
 ```
 
-**Execute a instalação:**
+**2. Execução da Instalação**
+
 ```bash
 sudo ./easysnort.py --install
 ```
----
-
-### 2. Informações Solicitadas pelo Script
-
-Veja como encontrá-las:
-
-* **Nome da Interface de Rede:**
-    Execute `ip a` para listar suas interfaces. Procure por nomes como `enp0s3` ou `eth0` que contenham seu endereço IP principal.
-
-* **Endereço de Rede (HOME_NET) em Formato CIDR:**
-    Na saída do comando `ip a`, observe o seu endereço `inet` (ex: `192.168.1.10/24`). O endereço de rede correspondente é o mesmo, mas com o final `.0` (ex: **`192.168.1.0/24`**).
+> **Nota:** Durante a execução, o script irá pausar para solicitar o **nome da interface de rede** (ex: `eth0, enp0s3 ou wlan0`) e o **endereço de sua rede local** em formato CIDR (ex: `192.168.1.0/24`).
 
 ---
 
-### 3. Gerenciamento do Serviço Snort
+### Comandos Disponíveis
 
-Após a instalação, o script cria um serviço `systemd`. Use os seguintes comandos para gerenciá-lo:
+Use os seguintes argumentos para gerenciar sua instalação do Snort.
 
-* **Iniciar o Serviço:**
-    ```bash
-    sudo systemctl start snort
-    ```
+**Caso deseje remover o EasySnort do seu sistema use o comando:**
+* `sudo easysnort --uninstall`: Remove completamente o Snort, seus arquivos, logs e configurações.
 
-* **Parar o Serviço:**
-    ```bash
-    sudo systemctl stop snort
-    ```
+**Controle do Serviço**
+* `sudo easysnort --start`: Inicia o serviço do Snort.
+* `sudo easysnort --stop`: Para o serviço do Snort.
+* `sudo easysnort --restart`: Reinicia o serviço do Snort.
+* `sudo easysnort --status`: Mostra o status detalhado do serviço.
 
-* **Verificar o Status (erros, atividade):**
-    ```bash
-    sudo systemctl status snort
-    ```
-    
-* **Ver os Logs de Alerta em Tempo Real:**
-    ```bash
-    tail -f /var/log/snort/snort_logs.log
-    ```
+**Gerenciamento de Logs**
+* `sudo easysnort --logs`: Exibe os logs de alerta em tempo real. Pressione `Ctrl+C` para sair.
+* `sudo easysnort --alert-type [TIPO]`: Muda o formato dos alertas (ex: `alert_full`, `alert_fast`) e reinicia o serviço para aplicar a mudança.
 
-* **(Opcional) Habilitar início automático com o sistema:**
-    ```bash
-    sudo systemctl enable snort
-    ```
-
-* **(Opcional) Desabilitar o início automático:**
-    ```bash
-    sudo systemctl disable snort
-    ```
----
+**Ajuda**
+* `sudo easysnort -h`, `--help`: Mostra a mensagem de ajuda com todos os comandos.
