@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.x-brightgreen.svg)
 ![Plataforma](https://img.shields.io/badge/plataforma-Linux-lightgrey.svg)
 
-**EasySnort** é uma ferramenta de linha de comando (CLI) que automatiza a instalação completa do Snort 3 em sistemas Debian e Ubuntu. Ele transforma o processo complexo de compilação e configuração em um único comando interativo.
+**EasySnort** é uma ferramenta que automatiza a instalação completa do Snort 3 em sistemas Debian e Ubuntu. Ele transforma o processo complexo de compilação e configuração em um único comando interativo.
 
 ---
 
@@ -12,30 +12,32 @@
 
 * **Sistema:** Debian 11/12 ou Ubuntu 22.04/24.04 (ou derivados).
 * **Acesso:** Privilégios de `root` ou um usuário com acesso `sudo`.
-* **Rede:** Conexão com a internet.
 
 ---
 
-### Instalação e Gerenciamento (Comandos)
+### Instalação
 
-Tudo que você precisa está neste bloco. O script irá pausar durante a execução para solicitar as informações de rede necessárias.
+**ATENÇÃO:** O script irá pausar durante a execução para solicitar algumas informações de rede necessárias.
 
 ### 1. Instalação
 
-Siga os passos abaixo para executar o instalador. O script é interativo e irá solicitar as informações de rede necessárias.
+**Baixe as dependências de pré-instação**
+```bash
+sudo apt install git python3
+```
 
-**a. Clone o repositório e entre no diretório:**
+**Clone o repositório e entre no diretório:**
 ```bash
 git clone https://github.com/nakomaNS/EasySnort
 cd EasySnort
 ```
 
-**b. Dê permissão de execução ao script:**
+**Dê permissão de execução ao script:**
 ```bash
 chmod +x autoinstaller.py
 ```
 
-**c. Execute a instalação:**
+**Execute a instalação:**
 ```bash
 sudo ./autoinstaller.py --install
 ```
@@ -43,7 +45,7 @@ sudo ./autoinstaller.py --install
 
 ### 2. Informações Solicitadas pelo Script
 
-Durante a instalação, você precisará fornecer duas informações. Veja como encontrá-las:
+Veja como encontrá-las:
 
 * **Nome da Interface de Rede:**
     Execute `ip a` para listar suas interfaces. Procure por nomes como `enp0s3` ou `eth0` que contenham seu endereço IP principal.
@@ -87,6 +89,3 @@ Após a instalação, o script cria um serviço `systemd`. Use os seguintes coma
     sudo systemctl disable snort
     ```
 ---
-
-### Licença
-Distribuído sob a licença MIT.
