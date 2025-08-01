@@ -5,11 +5,14 @@ import sys
 import subprocess
 import argparse
 import ipaddress
+import re
+import signal
 
 SNORT_LOG_PATH = "/var/log/snort"
 SNORT_CONFIG_PATH = "/usr/local/etc/snort"
 SNORT_LUA_PATH = "/usr/local/etc/snort/snort.lua"
 LOCAL_RULES_PATH = "/usr/local/etc/snort/rules/local.rules"
+SNORT_LOG_FILE = f"{SNORT_LOG_PATH}/snort_logs.log"
 
 
 def run_command(command, error_message):
@@ -188,10 +191,15 @@ outputs = {}
     print("[SUCESSO] Arquivos de configuração implantados.")
 
 
-def create_systemd_service():
-    print("\n>>> PASSO 6: Criando o serviço systemd...")
-    
-    net_interface = input("--> Digite o nome da interface de rede que o Snort deve monitorar (ex: enp0s3, eth0): ")
+def create_systemd_service(net_interface, alert_type='alert_full'):
+    """Gera e escreve o arquivo de serviço do systemd para o Snort."""
+    print(f"--> Gerando arquivo de serviço com interface '{net_interface}' e alerta '{alert_type}'...")
+
+    exec_commands = (
+        f"echo '' >> {SNORT_LOG_FILE}; "
+        f"echo '--- SNORT SERVICE (RE)STARTED AT $(date) ---' >> {SNORT_LOG_FILE}; "
+        f"stdbuf -oL /usr/local/bin/snort -c {SNORT_LUA_PATH} -i {net_interface} -A {alert_type} >> {SNORT_LOG_FILE} 2>&1"
+    )
 
     service_content = f"""
 [Unit]
@@ -200,7 +208,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c '/usr/local/bin/snort -c {SNORT_LUA_PATH} -i {net_interface} -A alert_full > {SNORT_LOG_PATH}/snort_logs.log 2>&1'
+ExecStart=/bin/sh -c "{exec_commands}"
 ExecStop=/bin/pkill snort
 Restart=on-failure
 
@@ -208,42 +216,251 @@ Restart=on-failure
 WantedBy=multi-user.target
 """
     service_path = "/etc/systemd/system/snort.service"
-    print(f"--> Criando arquivo de serviço em {service_path}...")
     write_file_as_root(service_path, service_content.strip())
     
     print("--> Recarregando o daemon do systemd...")
     run_command(['sudo', 'systemctl', 'daemon-reload'], "Falha ao recarregar o systemd.")
-    
-    print("[SUCESSO] Serviço systemd criado.")
-    print("\nPara gerenciar o serviço, use os comandos:")
-    print("  sudo systemctl start snort")
-    print("  sudo systemctl stop snort")
-    print("  sudo systemctl status snort")
-    print("  sudo systemctl enable snort  (para iniciar no boot)")
+    print("[SUCESSO] Arquivo de serviço do Snort atualizado.")
 
+def change_alert_type(new_type):
+    """Muda o tipo de alerta no arquivo de serviço e reinicia o Snort."""
+    print(f"\n>>> Alterando tipo de alerta para: {new_type}")
+    service_path = "/etc/systemd/system/snort.service"
+
+    if not os.path.exists(service_path):
+        print(f"[ERRO FATAL] O arquivo de serviço {service_path} não foi encontrado.")
+        print("--> Execute a instalação com '--install' primeiro.")
+        sys.exit(1)
+
+    try:
+        with open(service_path, 'r') as f:
+            service_content = f.read()
+        
+        match = re.search(r'-i\s+([^\s]+)', service_content)
+        if not match:
+            print("[ERRO FATAL] Não foi possível encontrar a interface de rede (-i) no arquivo de serviço.")
+            sys.exit(1)
+        
+        current_interface = match.group(1)
+        print(f"--> Interface de rede atual encontrada: {current_interface}")
+
+        create_systemd_service(net_interface=current_interface, alert_type=new_type)
+
+        print("--> Verificando status do serviço Snort...")
+        is_active = subprocess.run(['sudo', 'systemctl', 'is-active', '--quiet', 'snort']).returncode == 0
+        
+        if is_active:
+            print("--> Serviço está ativo. Reiniciando para aplicar as alterações...")
+            run_command(['sudo', 'systemctl', 'restart', 'snort'], "Falha ao reiniciar o serviço Snort.")
+            print("[SUCESSO] Serviço Snort reiniciado com o novo tipo de alerta.")
+        else:
+            print("--> Serviço não está ativo. A nova configuração será usada na próxima inicialização.")
+
+    except Exception as e:
+        print(f"\n[ERRO FATAL] Ocorreu um erro ao tentar alterar o tipo de alerta: {e}")
+        sys.exit(1)
+
+def setup_command_path():
+    """Torna o script um comando global do sistema (ex: 'easysnort')."""
+    print("\n>>> PASSO 7: Instalando o comando global 'easysnort'...")
+    
+    command_name = "easysnort"
+    command_path = "/usr/local/bin"
+    
+    try:
+        script_path = os.path.abspath(__file__)
+        destination_path = os.path.join(command_path, command_name)
+
+        print(f"--> Copiando o script para {destination_path} para uma instalação permanente...")
+        run_command(['sudo', 'cp', script_path, destination_path], f"Falha ao copiar o script para {command_path}.")
+
+        print(f"--> Dando permissão de execução para o comando instalado...")
+        run_command(['sudo', 'chmod', '+x', destination_path], f"Falha ao dar permissão de execução para {destination_path}.")
+        
+        print(f"[SUCESSO] Comando '{command_name}' instalado com sucesso!")
+        print(f"--> Agora você pode usar o comando '{command_name}' de qualquer lugar.")
+        print("--> O diretório original do script não é mais necessário para o funcionamento do comando.")
+
+    except Exception as e:
+        print(f"\n[AVISO] Não foi possível instalar o comando global: {e}")
+        print(f"--> A instalação continuará, mas você terá que executar o script usando 'python3 {__file__}'.")
+
+def show_logs():
+    """Mostra os logs do Snort em tempo real usando 'tail -f'."""
+    print(f"--> Mostrando logs de {SNORT_LOG_FILE}")
+    print("--> Pressione Ctrl+C para sair.")
+    
+    if not os.path.exists(SNORT_LOG_FILE):
+        print(f"\n[ERRO] O arquivo de log {SNORT_LOG_FILE} ainda não existe.")
+        print("--> Inicie o serviço Snort primeiro com 'sudo systemctl start snort' para gerar o log.")
+        sys.exit(1)
+        
+    command = ['sudo', 'tail', '-f', SNORT_LOG_FILE]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        if e.returncode == -signal.SIGINT:
+            print("\n--> Parando de mostrar os logs...")
+        else:
+            print(f"\n[ERRO FATAL] Falha ao executar o tail: {e}")
+            print("--> Verifique se você tem permissões de 'sudo' e se o 'tail' está instalado.")
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n--> Parando de mostrar os logs...")
+        sys.exit(0)
+
+def start_service():
+    """Inicia o serviço Snort via systemctl."""
+    print("--> Iniciando o serviço Snort...")
+    run_command(['sudo', 'systemctl', 'start', 'snort.service'], "Falha ao iniciar o serviço Snort.")
+    print("[SUCESSO] Serviço Snort iniciado.")
+
+def stop_service():
+    """Para o serviço Snort via systemctl."""
+    print("--> Parando o serviço Snort...")
+    try:
+        run_command(['sudo', 'systemctl', 'stop', 'snort.service'], "Falha ao parar o serviço.")
+        print("[SUCESSO] Serviço Snort parado.")
+    except subprocess.CalledProcessError:
+        print("--> Aviso: O serviço Snort já estava parado ou não foi encontrado.")
+
+def restart_service():
+    """Reinicia o serviço Snort via systemctl."""
+    print("--> Reiniciando o serviço Snort...")
+    run_command(['sudo', 'systemctl', 'restart', 'snort.service'], "Falha ao reiniciar o serviço Snort.")
+    print("[SUCESSO] Serviço Snort reiniciado.")
+
+def status_service():
+    """Mostra o status do serviço Snort via systemctl."""
+    print("--> Verificando o status do serviço Snort...")
+    try:
+        subprocess.run(['sudo', 'systemctl', 'status', 'snort.service'])
+    except FileNotFoundError:
+        print("\n[ERRO FATAL] Comando 'systemctl' não encontrado.")
+
+def uninstall_snort():
+    """Remove completamente o Snort, suas configurações, usuários e serviços."""
+    print("\n>>> INICIANDO DESINSTALAÇÃO COMPLETA DO SNORT <<<")
+    print("\n[AVISO] Esta ação é DESTRUTIVA e removerá:")
+    print("  - O serviço Snort (systemd)")
+    print("  - O comando 'easysnort'")
+    print("  - Todas as configurações, regras e logs do Snort")
+    print("  - O usuário e grupo 'snort'")
+    
+    confirm = input("\n--> Para confirmar, digite 'SIM' em maiúsculas: ")
+    if confirm != "SIM":
+        print("\n[CANCELADO] A desinstalação foi cancelada.")
+        sys.exit(0)
+
+    print("\n--> Parando e desabilitando o serviço Snort...")
+    try:
+        run_command(['sudo', 'systemctl', 'stop', 'snort.service'], "Falha ao parar o serviço.")
+        run_command(['sudo', 'systemctl', 'disable', 'snort.service'], "Falha ao desabilitar o serviço.")
+    except subprocess.CalledProcessError:
+        print("--> Aviso: O serviço Snort não foi encontrado ou já estava parado. Continuando a desinstalação.")
+
+    files_to_remove = [
+        "/etc/systemd/system/snort.service",
+        "/usr/local/bin/easysnort"
+    ]
+    dirs_to_remove = [
+        SNORT_LOG_PATH,
+        SNORT_CONFIG_PATH,
+        '/usr/local/lib/snort_dynamicrules'
+    ]
+
+    print("\n--> Removendo arquivos e diretórios do sistema...")
+    for f in files_to_remove:
+        if os.path.exists(f):
+            run_command(['sudo', 'rm', f], f"Falha ao remover o arquivo {f}.")
+    
+    for d in dirs_to_remove:
+        if os.path.exists(d):
+            run_command(['sudo', 'rm', '-rf', d], f"Falha ao remover o diretório {d}.")
+
+    print("\n--> Removendo usuário e grupo 'snort'...")
+    try:
+        if subprocess.run("id -u snort > /dev/null 2>&1", shell=True).returncode == 0:
+            run_command(['sudo', 'userdel', '-r', 'snort'], "Falha ao remover o usuário snort.")
+    except Exception: pass 
+
+    try:
+        if subprocess.run("getent group snort > /dev/null 2>&1", shell=True).returncode == 0:
+            run_command(['sudo', 'groupdel', 'snort'], "Falha ao remover o grupo snort.")
+    except Exception: pass
+    
+    print("\n[SUCESSO] Desinstalação concluída.")
+
+def show_help(parser):
+    """Exibe a ajuda e algumas dicas de uso."""
+    parser.print_help()
+    print("\nExemplos de uso:")
+    print("  sudo easysnort --install          # Instalação completa do zero.")
+    print("  sudo easysnort --uninstall        # Remoção completa do Snort.")
+    print("  sudo easysnort --start            # Inicia o serviço Snort.")
+    print("  sudo easysnort --stop             # Para o serviço Snort.")
+    print("  sudo easysnort --restart          # Reinicia o serviço Snort.")
+    print("  sudo easysnort --status           # Mostra o status do serviço.")
+    print("  sudo easysnort --logs             # Ver logs em tempo real.")
+    print("  sudo easysnort --alert-type fast  # Mudar tipo de alerta para 'fast'.")
 
 def main():
     """Função principal que gerencia os argumentos da linha de comando."""
     parser = argparse.ArgumentParser(
-        description="Instalador e Gerenciador Não Oficial do Snort 3 para Servidores.",
-        formatter_class=argparse.RawTextHelpFormatter
+    description="--- EasySnort - Instalador e Gerenciador do Snort 3 ---",
+    usage=argparse.SUPPRESS,
+    formatter_class=argparse.RawTextHelpFormatter,
+    add_help=False
     )
-    parser.add_argument('--install', action='store_true', help='Executa a instalação completa do Snort do zero.')
-    args = parser.parse_args()
-    if not args.install:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
+    
+    group = parser.add_argument_group('Ações de Instalação')
+    group.add_argument('--install', action='store_true', help='Executa a instalação completa do Snort 3.')
+    group.add_argument('--uninstall', action='store_true', help='Remove COMPLETAMENTE o Snort, seus arquivos e configurações.')
 
-    if args.install:
+    mgmt_group = parser.add_argument_group('Comandos de Gerenciamento')
+    mgmt_group.add_argument('--start', action='store_true', help='Inicia o serviço Snort.')
+    mgmt_group.add_argument('--stop', action='store_true', help='Para o serviço Snort.')
+    mgmt_group.add_argument('--restart', action='store_true', help='Reinicia o serviço Snort.')
+    mgmt_group.add_argument('--status', action='store_true', help='Mostra o status detalhado do serviço Snort.')
+    mgmt_group.add_argument('--logs', action='store_true', help='Mostra os logs do Snort em tempo real (use Ctrl+C para sair).')
+    mgmt_group.add_argument('--alert-type', type=str, metavar='TYPE', help='Muda o tipo de alerta (ex: alert_full) e reinicia o serviço.')
+    
+    parser.add_argument('-h', '--help', action='store_true', help='Mostra esta mensagem de ajuda e sai.')
+
+    args = parser.parse_args()
+
+    if args.help or len(sys.argv) == 1:
+        show_help(parser)
+    elif args.install:
         print("--- INICIANDO INSTALADOR NÃO OFICIAL DO SNORT ---")
         install_dependencies()
         work_dir = download_sources()
         compile_and_install(work_dir)
         setup_snort_environment()
         deploy_lua_and_rules()
-        create_systemd_service()
+        print("\n>>> PASSO 6: Configurando o serviço systemd...")
+        net_interface = input("--> Digite o nome da interface de rede que o Snort deve monitorar (ex: enp0s3, eth0): ")
+        create_systemd_service(net_interface)
+        setup_command_path()
         print("\n--- INSTALAÇÃO CONCLUÍDA! ---")
-        print(f"--> O log principal do Snort será salvo em: {SNORT_LOG_PATH}/snort_logs.log")
+        print(f"--> O log principal do Snort será salvo em: {SNORT_LOG_FILE}")
+        print("\nUse 'sudo easysnort --start' para iniciar o monitoramento.")
+    elif args.uninstall:
+        uninstall_snort()
+    elif args.start:
+        start_service()
+    elif args.stop:
+        stop_service()
+    elif args.restart:
+        restart_service()
+    elif args.status:
+        status_service()
+    elif args.logs:
+        show_logs()
+    elif args.alert_type:
+        change_alert_type(args.alert_type)
+    else:
+        show_help(parser)
 
 if __name__ == "__main__":
     main()
