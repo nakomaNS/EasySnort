@@ -23,6 +23,7 @@
 
 **Baixe as dependências de pré-instação**
 ```bash
+sudo apt update && sudo apt upgrade -y
 sudo apt install git python3
 ```
 
