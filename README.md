@@ -35,12 +35,12 @@ cd EasySnort
 
 **Dê permissão de execução ao script:**
 ```bash
-chmod +x autoinstaller.py
+chmod +x easysnort.py
 ```
 
 **Execute a instalação:**
 ```bash
-sudo ./autoinstaller.py --install
+sudo ./easysnort.py --install
 ```
 ---
 
